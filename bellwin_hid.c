@@ -29,7 +29,9 @@ static int bellwin_list_devices(void)
 	if (!cur_dev)
 		printf("No Bellwin USB devices found.\n");
 	else while (cur_dev) {
-		printf("Device Found\n  type: %04hx %04hx\n  path: %s\n  serial_number: %ls", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path, cur_dev->serial_number);
+		printf("Device Found\n  type: %04hx %04hx\n  path: %s\n  serial_number: %ls",
+		       cur_dev->vendor_id, cur_dev->product_id, cur_dev->path,
+		       cur_dev->serial_number);
 		printf("\n");
 		printf("  Manufacturer: %ls\n", cur_dev->manufacturer_string);
 		printf("  Product:      %ls\n", cur_dev->product_string);
@@ -61,6 +63,7 @@ int main(int argc, char **argv)
 		c = getopt_long(argc, argv, "vhl", long_options, &option_index);
 		if (c == -1)
 			break;
+
 		switch (c) {
 		case 'v':
 			print_version();
@@ -78,6 +81,8 @@ int main(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 	}
+
+	print_help(stdout);
 
 	return EXIT_SUCCESS;
 }
