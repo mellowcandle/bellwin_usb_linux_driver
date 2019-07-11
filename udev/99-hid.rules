@@ -1,0 +1,6 @@
+# This is a sample udev file for HIDAPI devices which changes the permissions
+# to 0666 (world readable/writable) for a specified device on Linux systems.
+#
+# HIDAPI/hidraw
+KERNEL=="hidraw*", ATTRS{busnum}=="1", ATTRS{idVendor}=="04d8", ATTRS{idProduct}=="fedc", MODE="0666"
+
