@@ -98,11 +98,6 @@ static void prepare_cmd(char *cmd, int idx, bool on)
 {
 	char cmd_template[7] = { 0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-	if (idx < 1 || idx > POWER_SWITCH_COUNT) {
-		fprintf(stderr, "Index out of bounds");
-		exit(EXIT_FAILURE);
-	}
-
 	cmd_template[5] = idx - 1;
 	cmd_template[6] = !!on;
 
@@ -130,7 +125,7 @@ static int get_device_status(hid_device *handle)
 	}
 
 	if (!timeout) {
-		fprintf("Timeout occurred while waiting for device reply\n");
+		fprintf(stderr, "Timeout occurred while waiting for device reply\n");
 		return 1;
 	}
 	for (int i = 1; i < (POWER_SWITCH_COUNT + 1); i++)
@@ -256,7 +251,7 @@ int main(int argc, char **argv)
 	char *serial = NULL;
 	char *path = NULL;
 	hid_device *handle = NULL;
-
+	int i;
 	int operation = OP_GET_STATUS;
 
 	while (1) {
@@ -266,7 +261,6 @@ int main(int argc, char **argv)
 			{"version", no_argument, 0, 'v'},
 			{"verbose", no_argument, 0, 'V'},
 			{"help", no_argument, 0, 'h'},
-			{"status", no_argument, 0, 's'},
 			{"serial", required_argument, 0, 'S'},
 			{"device", required_argument, 0, 'D'},
 			{0, 0, 0, 0}
@@ -274,7 +268,7 @@ int main(int argc, char **argv)
 
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "VvhlsS:D:", long_options, &option_index);
+		c = getopt_long(argc, argv, "Vvhls:d:", long_options, &option_index);
 		if (c == -1)
 			break;
 
@@ -291,13 +285,10 @@ int main(int argc, char **argv)
 		case 'l':
 			return bellwin_list_devices();
 		case 's':
-			operation = OP_GET_STATUS;
+			serial = optarg;
 			break;
-		case 'S':
-			serial = optstring;
-			break;
-		case 'D':
-			device = optstring;
+		case 'd':
+			path = optarg;
 			break;
 		case 0:
 		case '?':
@@ -306,6 +297,12 @@ int main(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 	}
+
+	argc -= optind;
+	argv += optind;
+
+	if (argc)
+		operation = OP_SET_POWER;
 
 	if (hid_init()) {
 		fprintf(stderr, "Failed initializing HID subsystem\n");
@@ -324,14 +321,41 @@ int main(int argc, char **argv)
 	}
 
 	hid_set_nonblocking(handle, 1);
-	//print_help(stdout);
-//	test(verbose);
-	switch (operation) {
-	case OP_GET_STATUS:
+
+	if (operation == OP_GET_STATUS) {
 		ret = get_device_status(handle);
-		break;
+	} else if (operation == OP_SET_POWER) {
+		for (i = 0; i < argc; i++) {
+			char cmd[7];
+			int offset;
+			int value;
+
+			ret = sscanf(argv[i], "%u=%d", &offset, &value);
+			if (ret != 2) {
+				fprintf(stderr, "invalid offset<->value mapping: %s", argv[i]);
+				ret = 1;
+				goto out;
+			}
+
+			if (value != 0 && value != 1) {
+				fprintf(stderr, "value must be 0 or 1: %s", argv[1]);
+				ret = 1;
+				goto out;
+			}
+
+			if (offset > POWER_SWITCH_COUNT || offset < 1) {
+				fprintf(stderr,"invalid offset: %s", argv[i]);
+				ret = 1;
+				goto out;
+			}
+			printf("Setting %d to %s\n", offset, value ? "ON" : "OFF");
+			prepare_cmd(cmd, offset, value);
+			send_command(handle, cmd, 7);
+		}
+
 	}
 
+out:
 	hid_close(handle);
 	hid_exit();
 	if (!ret)
