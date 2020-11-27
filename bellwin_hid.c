@@ -8,12 +8,22 @@
 
 #define BELLWIN_VENDOR	0x04d8
 #define BELLWIN_PRODUCT	0xfedc
+#define BIT(x) (1 << (x))
+
+#define POWER_SWITCH_COUNT 5
+
+#define OP_GET_STATUS 0
+#define OP_SET_POWER 1
+
 static void print_help(FILE *out)
 {
-	fprintf(out, "Usage: bellwin_ctl [OPTION...] \n\n");
+	fprintf(out, "Usage: bellwin_ctl [OPTIONS] [<outlet1>=<value1> <outlet2>=<value2>] ...\n\n");
+
 	fprintf(out, "  -l, --list\t\t List available bellwin USB devices\n");
 	fprintf(out, "  -h, --help\t\t Display this help and exit\n");
 	fprintf(out, "  -v, --version\t\t Output version information and exit\n");
+	fprintf(out, "  -D, --device\t\t <dev path> Open device by device node (IE. /dev/hidraw3/)\n");
+	fprintf(out, "  -S, --serial\t\t <serial> Open device by serial number\n");
 
 }
 static void print_version(void)
@@ -21,6 +31,7 @@ static void print_version(void)
 	printf("Bellwin USB power control v0.1\n");
 }
 
+static bool verbose = false;
 
 static int bellwin_list_devices(void)
 {
@@ -52,8 +63,7 @@ static int bellwin_list_devices(void)
 	return EXIT_SUCCESS;
 }
 
-static int send_command(hid_device *handle, const char *cmd, size_t len,
-			bool verbose)
+static int send_command(hid_device *handle, const char *cmd, size_t len)
 {
 	unsigned char buf[0x40];
 	int ret;
@@ -88,8 +98,8 @@ static void prepare_cmd(char *cmd, int idx, bool on)
 {
 	char cmd_template[7] = { 0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-	if (idx < 1 || idx > 5) {
-		printf("Index out of bounds");
+	if (idx < 1 || idx > POWER_SWITCH_COUNT) {
+		fprintf(stderr, "Index out of bounds");
 		exit(EXIT_FAILURE);
 	}
 
@@ -99,9 +109,75 @@ static void prepare_cmd(char *cmd, int idx, bool on)
 	memcpy(cmd, cmd_template, 7);
 }
 
+static int get_device_status(hid_device *handle)
+{
+	const char cmd1[7] = { 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+	unsigned char buf[256];
+	int ret;
+	int timeout = 5;
+	send_command(handle, cmd1, 7);
+
+	/* Wait for response */
+	ret = 0;
+	while (ret == 0 && timeout--) {
+		ret = hid_read(handle, buf, sizeof(buf));
+		if (ret == 0)
+			printf("waiting...\n");
+		if (ret < 0)
+			printf("Unable to read()\n");
+
+		usleep(500*1000);
+	}
+
+	if (!timeout) {
+		fprintf("Timeout occurred while waiting for device reply\n");
+		return 1;
+	}
+	for (int i = 1; i < (POWER_SWITCH_COUNT + 1); i++)
+		printf("Power switch %d: %s\n", i,
+		       (buf[5] & BIT(i-1)) ? "ON" : "OFF");
+
+	return 0;
+}
+
+hid_device *device_open_path(const char *path)
+{
+	hid_device *handle = NULL;
+	handle = hid_open_path(path);
+	if (!handle) {
+		perror("Unable to open device");
+	}
+
+	return handle;
+}
+
+hid_device *device_open_serial(const char *serial)
+{
+	hid_device *handle = NULL;
+	struct hid_device_info *devs;
+
+	if (!serial) {
+		devs = hid_enumerate(BELLWIN_VENDOR, BELLWIN_PRODUCT);
+		if (!devs)
+			return NULL;
+		else if (devs->next) {
+			fprintf(stderr,
+				"More than one bellwin device found, please use --serial or --device option\n");
+			hid_free_enumeration(devs);
+			return NULL;
+		}
+	}
+
+	handle = hid_open(BELLWIN_VENDOR, BELLWIN_PRODUCT, serial);
+	if (!handle)
+		perror("Unable to open device");
+
+	return handle;
+}
+
+#if 0
 static int test(bool verbose)
 {
-	hid_device *handle;
 	unsigned char buf[256];
 	int ret;
 	int i;
@@ -118,7 +194,6 @@ static int test(bool verbose)
 	}
 	//
 	// Set the hid_read() function to be non-blocking.
-	hid_set_nonblocking(handle, 1);
 
 	send_command(handle, cmd1, 7, verbose);
 
@@ -138,7 +213,7 @@ static int test(bool verbose)
 		printf("%02hhx ", buf[i]);
 	printf("\n");
 
-	prepare_cmd(new_cmd, 1, true);
+	prepare_cmd(new_cmd, 1, false);
 	send_command(handle, new_cmd, 7, verbose);
 
 
@@ -173,11 +248,16 @@ static int test(bool verbose)
 
 	return 0;
 }
-
+#endif
 int main(int argc, char **argv)
 {
 	int c;
-	bool verbose = false;
+	int ret;
+	char *serial = NULL;
+	char *path = NULL;
+	hid_device *handle = NULL;
+
+	int operation = OP_GET_STATUS;
 
 	while (1) {
 
@@ -186,12 +266,15 @@ int main(int argc, char **argv)
 			{"version", no_argument, 0, 'v'},
 			{"verbose", no_argument, 0, 'V'},
 			{"help", no_argument, 0, 'h'},
+			{"status", no_argument, 0, 's'},
+			{"serial", required_argument, 0, 'S'},
+			{"device", required_argument, 0, 'D'},
 			{0, 0, 0, 0}
 		};
 
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "Vvhl", long_options, &option_index);
+		c = getopt_long(argc, argv, "VvhlsS:D:", long_options, &option_index);
 		if (c == -1)
 			break;
 
@@ -207,6 +290,14 @@ int main(int argc, char **argv)
 			exit(EXIT_SUCCESS);
 		case 'l':
 			return bellwin_list_devices();
+		case 's':
+			operation = OP_GET_STATUS;
+			break;
+		case 'S':
+			serial = optstring;
+			break;
+		case 'D':
+			device = optstring;
 			break;
 		case 0:
 		case '?':
@@ -216,9 +307,36 @@ int main(int argc, char **argv)
 		}
 	}
 
+	if (hid_init()) {
+		fprintf(stderr, "Failed initializing HID subsystem\n");
+		exit(EXIT_FAILURE);
+	}
 
+	if (path)
+		handle = device_open_path(path);
+	else
+		handle = device_open_serial(serial);
+
+	if (!handle) {
+		fprintf(stderr, "Couldn't open HID device\n");
+		print_help(stderr);
+		exit(EXIT_FAILURE);
+	}
+
+	hid_set_nonblocking(handle, 1);
 	//print_help(stdout);
-	test(verbose);
-	return EXIT_SUCCESS;
+//	test(verbose);
+	switch (operation) {
+	case OP_GET_STATUS:
+		ret = get_device_status(handle);
+		break;
+	}
+
+	hid_close(handle);
+	hid_exit();
+	if (!ret)
+		return EXIT_SUCCESS;
+	else
+		return EXIT_FAILURE;
 }
 
