@@ -3,11 +3,11 @@ CFLAGS := -Wall -Ihidlib
 LDFLAGS := -ludev
 
 all: $(OBJS)
-		$(CC) -o bellwin_hid $(OBJS) $(LDFLAGS)
+		$(CC) -o bellwin $(OBJS) $(LDFLAGS)
 
 clean:
 		rm -rf *.o */*.o bellwin_hid
 
 install:
-	cp bellwin_hid /usr/sbin
-	cp udev/99-hid.rules /etc/rules.d/
+	cp bellwin /usr/sbin
+	cp udev/99-bellwin-hid.rules /etc/rules.d/
