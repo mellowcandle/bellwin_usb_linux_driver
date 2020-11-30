@@ -33,6 +33,24 @@ static void print_version(void)
 
 static bool verbose = false;
 
+/* The caller must free the returned string with free(). */
+static wchar_t *utf8_to_wchar_t(const char *utf8)
+{
+	wchar_t *ret = NULL;
+
+	if (utf8) {
+		size_t wlen = mbstowcs(NULL, utf8, 0);
+		if ((size_t) -1 == wlen) {
+			return wcsdup(L"");
+		}
+		ret = calloc(wlen+1, sizeof(wchar_t));
+		mbstowcs(ret, utf8, wlen+1);
+		ret[wlen] = 0x0000;
+	}
+
+	return ret;
+}
+
 static int bellwin_list_devices(void)
 {
 	struct hid_device_info *devs, *cur_dev;
@@ -150,6 +168,7 @@ hid_device *device_open_serial(const char *serial)
 {
 	hid_device *handle = NULL;
 	struct hid_device_info *devs;
+	wchar_t *ret = NULL;
 
 	if (!serial) {
 		devs = hid_enumerate(BELLWIN_VENDOR, BELLWIN_PRODUCT);
@@ -163,10 +182,12 @@ hid_device *device_open_serial(const char *serial)
 		}
 	}
 
-	handle = hid_open(BELLWIN_VENDOR, BELLWIN_PRODUCT, serial);
+	ret = utf8_to_wchar_t(serial);
+	handle = hid_open(BELLWIN_VENDOR, BELLWIN_PRODUCT, ret);
 	if (!handle)
 		perror("Unable to open device");
 
+	free(ret);
 	return handle;
 }
 
