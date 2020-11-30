@@ -7,11 +7,11 @@ I take no responsibility for any damage you might encounter.
 
 Userpsace Linux driver based on Linux hidraw kernel driver.
 
-Installation:
+## Installation
 
 Build by running `make && sudo make install`
 
-After installation:
-run: udevadm control --reload-rules
+## After installation:
+run: `udevadm control --reload-rules`
 Disconnect and reconnect the USB device.
 
