@@ -10,4 +10,4 @@ clean:
 
 install:
 	cp bellwin /usr/sbin
-	cp udev/99-bellwin-hid.rules /etc/rules.d/
+	cp udev/99-bellwin-hid.rules /etc/udev/rules.d/
