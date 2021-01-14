@@ -194,7 +194,7 @@ hid_device *device_open_serial(const char *serial)
 int main(int argc, char **argv)
 {
 	int c;
-	int ret;
+	int ret = 0;
 	char *serial = NULL;
 	char *path = NULL;
 	hid_device *handle = NULL;
@@ -283,13 +283,13 @@ int main(int argc, char **argv)
 				ret = 1;
 				goto out;
 			}
+			ret = 0;
 
 			if (value != 0 && value != 1) {
 				fprintf(stderr, "value must be 0 or 1: %s", argv[1]);
 				ret = 1;
 				goto out;
 			}
-
 			if (offset > POWER_SWITCH_COUNT || offset < 1) {
 				fprintf(stderr,"invalid offset: %s", argv[i]);
 				ret = 1;
